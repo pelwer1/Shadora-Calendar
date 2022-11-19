@@ -505,7 +505,13 @@ var LazyCalendar = LazyCalendar || (function() {
 
             return calendar.weekdays.length - 1;
         },
+        sky: (name) => {
+            let calendar = state[state_name].calendar;
 
+            calendar.sky.push(name);
+
+            return calendar.sky.length - 1;
+        },
         holiday: (name) => {
             let calendar = state[state_name].calendar;
 
@@ -636,22 +642,27 @@ var LazyCalendar = LazyCalendar || (function() {
         if(config.use_moons && config.send_moons && (details === 'full' || details === 'moons')){
             // if(details === 'full') contents += '<hr>';
             if(details === 'full') contents += hr;
-            // contents += '<hr><b>Moon Phase:</b><br>';
             contents += '<b>Moon Phase:</b><br>';
             getMoons().forEach((moon, id) => {
                 // contents += '<u>'+moon.name+'</u> - ' + calculateMoonPhase(getCurrentYear(), getCurrentMonthId()+1, getCurrentDoM(), getMonth().days, getTotalYearDays(), moon.cycle, true).phase + '<br>';
                 contents += '<u>'+moon.name+'</u> is in the ' + calculateMoonPhase() + ' phase<br>';
             });
+            contents += '<b>Sky Event: </b><br>' +     '<span style=" font-weight: normal; color:blue ">' +getCurrentSky() + '</span>';
+
         }
+
+
+
 
         // write the holidays
         if(config.use_holidays && config.send_holidays && (details === 'full' || details === 'holidays')){
             if(details === 'full') contents += hr;
-            contents += '<b>Holidays this Month:</b><br>';
-            contents += (!getHolidays().length) ? 'No holidays in this month.' : '';
+            contents += '<b>Holidays this Month:</b><br><ul>';
+            contents += (!getHolidays().length) ? '<li>No holidays in this month.' : '';
             getHolidays().forEach(holiday => {
-                contents += '<i>The ' + ordinal(holiday.day) + ' is ' + holiday.name + '</i><br>'
+                contents += '<li>The ' + ordinal(holiday.day) + ' is ' + holiday.name
             });
+            contents += '</ul>';
         }
 
         make.menu(contents, script_name);
@@ -705,6 +716,8 @@ var LazyCalendar = LazyCalendar || (function() {
                 // contents += '<u>'+moon.name+'</u> - ' + calculateMoonPhase() + '<br>';
                 contents += '<u>'+moon.name+'</u> is in the ' + calculateMoonPhase() + ' phase<br>';
             });
+            contents += '<b>Sky Event: </b><br>' +     '<span style=" font-weight: normal; color:blue ">' +getCurrentSky() + '</span>';
+
         }
 
         if(config.use_holidays){
@@ -735,6 +748,7 @@ var LazyCalendar = LazyCalendar || (function() {
         setCurrentDoY(getCurrentDoY() + days);
 
         setCurrentDoW(calculateWeekday(getCurrentYear(), getCurrentMonthId(), getCurrentDoM(), true));
+        setCurrentSky();
 
         if(config.use_weather) setCurrentWeather(getMonth().weather_type);
         if(config.use_token) setToken();
@@ -811,7 +825,7 @@ var LazyCalendar = LazyCalendar || (function() {
         advanceYear(year-getCurrentYear());
     },
 
-    // To much hacks... Needs fixing.
+    // OUTPUT - calendar table writer
     generateTable = (totalDays=getMonth().days, currentDay=getCurrentDoM()) => {
         let calendar = state[state_name].calendar,
             totalWeekdays = calendar.weekdays.length,
@@ -827,6 +841,7 @@ var LazyCalendar = LazyCalendar || (function() {
         calendar.weekdays.forEach(day => { table += '<th style="font-size: 9pt">'+handleLongString(day, 3, '')+'</th>';     });
         table += '</tr>'
 
+
         for(let i = 0; i < Math.ceil(totalDays/totalWeekdays)+1; i++){
             table += '<tr>';
 
@@ -840,8 +855,35 @@ var LazyCalendar = LazyCalendar || (function() {
                 }
 
                 dayGen = dayGen - fDoW;
+
+                let dayGen_is_holiday = false;
+                if (getHolidays().length) {
+                  getHolidays().forEach(holiday => {
+                    if (dayGen_is_holiday || dayGen === holiday.day ) {
+                      // green circle w/red border
+                      dayGen_is_holiday = true;
+                    }
+                  });  // end forEach holiday
+                }
+
+                // style the day
+                let dayStyle = '';
+
+                if (dayGen === currentDay && dayGen_is_holiday) {
+                  // green circle w/red border
+                  dayStyle = 'padding-left: 4px; padding-right: 3px; font-weight: bold; color: white; background-color: green; border: 1px solid; border-radius: 50%; border-color:red ' ;
+                }
+                else if (dayGen === currentDay ) {
+                  // green circle w/no border
+                  dayStyle = 'padding-left: 4px; padding-right: 3px; font-weight: bold; color: white; background-color: green; border: 1px solid transparent; border-radius: 50%;' ;
+                }
+                else if (dayGen_is_holiday) {
+                  // red circle w/no fill
+                  dayStyle = 'padding-left: 4px; padding-right: 3px; font-weight: normal; color: black; background-color: white; border: 1px solid; border-radius: 50%; border-color:red' ;
+                }
+
                 
-                let dayStyle = (dayGen === currentDay) ? 'padding-left: 4px; padding-right: 3px; font-weight: bold; color: white; background-color: green; border: 1px solid transparent; border-radius: 50%;' : '';
+                // let dayStyle = (dayGen === currentDay) ? 'padding-left: 4px; padding-right: 3px; font-weight: bold; color: white; background-color: green; border: 1px solid transparent; border-radius: 50%;' : '';
                 if(totalDays < dayGen) break;
                 table += '<td><span style="'+dayStyle+'">'+dayGen+'</span></td>'
                 
@@ -950,6 +992,27 @@ var LazyCalendar = LazyCalendar || (function() {
 
         return calendar.current.weather;
     },
+
+
+
+    // celestial event 20% chance per day
+    getCurrentSky = () => state[state_name].calendar.current.sky,
+
+    setCurrentSky = () => {
+        let calendar = state[state_name].calendar,
+            sky_types = calendar.sky;
+
+        calendar.current.sky = "None";
+        // 20% chance of an event
+        if (  Math.floor(Math.random() * 100) + 0 < 20 ) {
+            let randomNumber = Math.floor(Math.random() * sky_types.length) + 0;
+            calendar.current.sky = sky_types[randomNumber];
+        }
+        return calendar.current.sky;
+    },
+
+
+
 
     getMonth = (monthId=getCurrentMonthId()) => state[state_name].calendar.months[monthId] || false,
 
@@ -1561,6 +1624,7 @@ var LazyCalendar = LazyCalendar || (function() {
                     day_of_the_month: 1,
                     year: 755,
                     weather: 'Clear - The weather is fair and there are no clouds in the sky.',
+                    sky: 'None'
                 },
                 weekdays: ['Darksday','Dirtsday','Lightsday','Windsday','Riversday','Shadesday','Bloomsday','Heatsday','Galesday','Lakesday'],
     
@@ -1616,6 +1680,27 @@ var LazyCalendar = LazyCalendar || (function() {
                     { name: "Renewal Week", month: 5, day: 11 },
                     { name: "New Year's Eve", month: 5, day: 20 },
                 ],
+                sky: [
+                    "The Stars Are Right: Magic is powerful. -1 to all rolls to resist magic today.",
+                    "The Stars Are Wrong: Magic is weakened. +1 to all rolls to resist magic today.",
+                    "A Lunar Eclipse: +2 on rolls to resist mind affecting spells and abilities.",
+                    "A Solar Eclipse: The entire world is Dim lighting today.",
+                    "A Rogue Comet: The dead rise! Undead are +1 to all rolls today. Any random encounter will some type of undead. ",
+                    "Blood Moon: +2 to all attack and spell damage rolls today.",
+                    "Shooting Star: All Wildcards gain a Benny that must be used today.",
+                    "Aurora Borealis: Magical surge. All Wildcards gain 5 Power Points (PP) for the day.  PP recharge at twice normal rate today.",
+                    "The Stars Align: Advance the clock of a single Heroic Icon chosen by the Players.",
+                    "The Stars Misalign: Advance the clock of a single Villianous Icon chosen by the Players.",
+                    "A New Star Appears: It is awe inspiring. All Wildcards gain a Conviction that must be used today.",
+                    "A Star Disappears: It is frightening. -1 to all Fright Checks for the next day.",
+                    "Ball Lightning: Mysterious spheres of energy dart around the sky. For next day, when a spell is successfully cast, the caster must make a Vigor roll or have whatever spell they are attempting to cast turned into a 2d6 Lightning Bolt.  (3d6 Bolt on a Vigor fumble) ",
+                    "Fireball: Mysterious spheres of energy dart around the sky. For next day, when a spell is successfully cast, the caster must make a Vigor roll or have whatever spell they are attempting to cast turned into a 2d6 Fire Blast in a Small Blast Template.  (3d6 Blast on a Vigor fumble) ",
+                    "Mysterious Spot on the Moon: Any one who dies violently today and fails a Vigor roll is turned into a Wight.",
+                    "Solar Flares: Magic is in flux. All casters that fail spell checks must roll on the Backlash table today.",
+                    "Meteor Shower: The skies are lit up by a rain of meteors and a fine dust falls from the sky. Magical healing does not work for the next day.",
+                    "Super Nova: A star flares brightly in the night sky then fades away. Any PC that dies today goes out in a blaze of glory and cannot be ressurected.",
+                ],
+
                 weather_types: [  // need to get some cold in here
                     {
                         name: 'Shadora',
@@ -1735,6 +1820,9 @@ var LazyCalendar = LazyCalendar || (function() {
                 if(!state[state_name].calendar.current.hasOwnProperty('day_of_the_week')){
                     state[state_name].calendar.current.day_of_the_week = defaults.calendar.current.day_of_the_week;
                 }
+                if(!state[state_name].calendar.current.hasOwnProperty('sky')){
+                    state[state_name].calendar.current.day_of_the_week = defaults.calendar.current.sky;
+                }
                 if(!state[state_name].calendar.current.hasOwnProperty('day_of_the_year')){
                     state[state_name].calendar.current.day_of_the_year = defaults.calendar.current.day_of_the_year;
                 }
@@ -1753,6 +1841,9 @@ var LazyCalendar = LazyCalendar || (function() {
             }
             if(!state[state_name].calendar.hasOwnProperty('weekdays')){
                 state[state_name].calendar.weekdays = defaults.calendar.weekdays;
+            }
+            if(!state[state_name].calendar.hasOwnProperty('sky')){
+                state[state_name].calendar.sky = defaults.calendar.sky;
             }
             if(!state[state_name].calendar.hasOwnProperty('seasons')){
                 state[state_name].calendar.seasons = defaults.calendar.seasons;
